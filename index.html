@@ -3,14 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Attendance System</title>
+    <title>Enterprise Attendance System</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body { background: #0f0c29; background: linear-gradient(to right, #24243e, #302b63, #0f0c29); color: white; font-family: 'Inter', sans-serif; min-height: 100vh; }
         .glass { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 20px; padding: 30px; box-shadow: 0 8px 32px 0 rgba(0,0,0,0.37); }
-        .btn-primary { background: #00d2ff; border: none; font-weight: bold; border-radius: 10px; color: #000; }
+        .btn-primary { background: #00d2ff; border: none; font-weight: bold; border-radius: 10px; color: #000; transition: 0.3s; }
+        .btn-primary:hover { background: #00a8cc; color: white; transform: translateY(-2px); }
         .btn-danger-custom { background: transparent; border: 2px solid #ff4b4b; color: #ff4b4b; font-weight: bold; border-radius: 10px; transition: 0.3s; }
-        .btn-danger-custom:hover { background: #ff4b4b; color: white; }
+        .btn-danger-custom:hover { background: #ff4b4b; color: white; transform: translateY(-2px); }
         .table { color: white; border-color: rgba(255,255,255,0.1); }
         .status-badge { font-size: 0.8rem; padding: 5px 12px; border-radius: 20px; color: #000; }
         .flash-update { animation: flash 1.5s ease-out; }
@@ -21,38 +22,39 @@
     <div class="container">
         <div class="row mb-4 align-items-center">
             <div class="col">
-                <h1 class="fw-bold m-0 text-uppercase">Attendance Dashboard</h1>
-                <p class="text-white m-0 mt-1" style="opacity: 0.9;">Professional Cloud Terminal</p>
+                <h1 class="fw-bold m-0 text-uppercase">Access Control Hub</h1>
+                <p class="text-white m-0 mt-1" style="opacity: 0.9;">Live Event Stream & HR Logging</p>
             </div>
             <div class="col-auto d-flex gap-3">
-                <button onclick="clearData()" class="btn btn-danger-custom px-4 py-2">Clear Data</button>
-                <a href="/download" class="btn btn-primary px-4 py-2">Download CSV</a>
+                <button onclick="clearData()" class="btn btn-danger-custom px-4 py-2">Clear Daily Memory</button>
+                <a href="/download" class="btn btn-primary px-4 py-2">💾 Download HR Summary (CSV)</a>
             </div>
         </div>
 
         <div class="row g-4">
             <div class="col-md-3">
                 <div class="glass text-center h-100 d-flex flex-column justify-content-center">
-                    <h6 class="text-uppercase text-muted small fw-bold">System Status</h6>
-                    <div class="d-flex justify-content-center align-items-center mt-2">
+                    <h6 class="text-uppercase text-muted small fw-bold">Cloud Server Status</h6>
+                    <div class="d-flex justify-content-center align-items-center mt-2 mb-3">
                         <span class="status-badge bg-success me-2">ONLINE</span>
-                        <span id="clock" class="h4 m-0 fw-bold">--:--:--</span>
                     </div>
+                    <h6 class="text-uppercase text-muted small fw-bold mt-2">Indian Standard Time</h6>
+                    <span id="clock" class="h3 m-0 fw-bold text-info">--:--:--</span>
                 </div>
             </div>
 
             <div class="col-md-9">
                 <div class="glass">
-                    <h5 class="mb-4 fw-bold">Live Activity Stream</h5>
+                    <h5 class="mb-4 fw-bold">Live Hardware Activity Stream</h5>
                     <div class="table-responsive">
                         <table class="table table-hover table-borderless align-middle">
                             <thead class="border-bottom border-secondary">
                                 <tr>
-                                    <th>User ID</th>
-                                    <th>Full Name</th>
-                                    <th>Timestamp</th>
-                                    <th>Action</th>
-                                    <th>Status</th>
+                                    <th>Hardware ID</th>
+                                    <th>Employee Name</th>
+                                    <th>Event Time</th>
+                                    <th>Door Action</th>
+                                    <th>Database Status</th>
                                 </tr>
                             </thead>
                             <tbody id="logTable"></tbody>
@@ -66,11 +68,11 @@
     <script>
         // Start the clock safely
         setInterval(() => {
-            document.getElementById('clock').innerText = new Date().toLocaleTimeString();
+            document.getElementById('clock').innerText = new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour12: false });
         }, 1000);
 
         function clearData() {
-            if(confirm("⚠️ This will wipe the cloud logs. Continue?")) {
+            if(confirm("⚠️ This will permanently wipe today's HR logs from the cloud. Continue?")) {
                 fetch('/clear', { method: 'POST' });
             }
         }
@@ -88,7 +90,7 @@
             }
             
             let statusBadge = data.user === "Unknown User" 
-                ? `<span class="badge bg-danger rounded-pill text-white">✖ Unverified</span>` 
+                ? `<span class="badge bg-danger rounded-pill text-white">✖ Access Denied</span>` 
                 : `<span class="badge bg-success rounded-pill text-black">● Verified</span>`;
 
             let actionColor = data.action === "Check-In" ? "text-success" : "text-warning";
