@@ -12,10 +12,12 @@ app.use(cors());
 let activeSessions = {};
 let attendanceLogs = []; // Stores data for the CSV download
 
+// Add or remove your employees/students here!
 function lookupUser(uid) {
     if (uid === "D3 5F 75 34") return "Vishnuprasad";
     if (uid === "AE CB DE 89") return "Deepasree";
     if (uid === "0E 0D CF 89") return "Seshan";
+    if (uid === "9E 8C DF 89") return "Seshan"; // Added your test card
     return "Unknown User";
 }
 
@@ -24,7 +26,7 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// --- 3. LIVE CONNECTION TO THE WEBSITE ---
+// --- 3. LIVE CONNECTION TO THE WEBSITE (SSE) ---
 let clients = [];
 app.get('/events', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
@@ -36,7 +38,7 @@ app.get('/events', (req, res) => {
     });
 });
 
-// --- 4. RECEIVE ESP32 SCANS ---
+// --- 4. RECEIVE ESP32 SCANS & VERIFY ---
 app.post('/api/attendance', (req, res) => {
     const uid = req.body.uid;
     if (!uid) return res.status(400).send("No UID");
@@ -59,14 +61,19 @@ app.post('/api/attendance', (req, res) => {
     // Save to the CSV array
     attendanceLogs.push({id: uid, user: name, time: timeString, action: action});
 
-    // Create the data package
+    // Create the data package for the website
     const payload = JSON.stringify({ id: uid, user: name, time: timeString, action: action });
     console.log(`\n🔔 CLOUD PROCESSED: ${payload}`);
 
     // Broadcast to the website instantly
     clients.forEach(client => client.write(`data: ${payload}\n\n`));
 
-    res.status(200).send("Success");
+    // Reply directly to the ESP32 so it can update the LCD Screen!
+    if (name === "Unknown User") {
+        res.status(200).send("UNVERIFIED");
+    } else {
+        res.status(200).send("VERIFIED:" + name);
+    }
 });
 
 // --- 5. BUTTON ROUTES (Download & Clear) ---
