@@ -11,15 +11,13 @@ app.use(cors());
 // --- 1. THE DATABASE & MEMORY ---
 let activeSessions = {}; // Used just to toggle the visual "Check-In/Out" on the website
 let rawLogs = [];        // Keeps every scan for the live web stream
-
-// NEW: The Professor's Summary Object
-let dailySummary = {};   
+let dailySummary = {};   // Keeps the HR First-In / Last-Out data
 
 function lookupUser(uid) {
     if (uid === "D3 5F 75 34") return "Vishnuprasad";
     if (uid === "AE CB DE 89") return "Deepasree";
     if (uid === "0E 0D CF 89") return "Seshan";
-    if (uid === "9E 8C DF 89") return "Guest"; // Test card
+    if (uid === "9E 8C DF 89") return "Guest"; // Your test card
     return "Unknown User";
 }
 
@@ -50,6 +48,9 @@ app.post('/api/attendance', (req, res) => {
     // Calculate Indian Standard Time (IST)
     const timeOptions = { timeZone: 'Asia/Kolkata', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' };
     const timeString = new Date().toLocaleTimeString('en-US', timeOptions);
+    
+    // Short time specifically formatted for the tiny 16x2 LCD
+    const shortTime = new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' });
 
     // Determine Check-in or Check-out for the visual UI
     let action = "Check-In";
@@ -60,17 +61,11 @@ app.post('/api/attendance', (req, res) => {
         activeSessions[uid] = true;
     }
 
-    // --- NEW: HR SUMMARY LOGIC ---
+    // --- HR SUMMARY LOGIC ---
     if (name !== "Unknown User") {
         if (!dailySummary[uid]) {
-            // First time this user has scanned today! Lock in the First In time.
-            dailySummary[uid] = {
-                user: name,
-                firstIn: timeString,
-                lastOut: "Still on shift" // This will update next time they scan
-            };
+            dailySummary[uid] = { user: name, firstIn: timeString, lastOut: "Still on shift" };
         } else {
-            // Not their first scan. Simply overwrite their Last Out time.
             dailySummary[uid].lastOut = timeString;
         }
     }
@@ -82,26 +77,24 @@ app.post('/api/attendance', (req, res) => {
     const payload = JSON.stringify({ id: uid, user: name, time: timeString, action: action });
     clients.forEach(client => client.write(`data: ${payload}\n\n`));
 
-    // Reply directly to the ESP32 LCD Screen
+    // --- REPLY TO ESP32 TERMINAL ---
     if (name === "Unknown User") {
         res.status(200).send("UNVERIFIED");
+    } else if (action === "Check-In") {
+        res.status(200).send("IN|" + name + "|" + shortTime);
     } else {
-        res.status(200).send("VERIFIED:" + name);
+        res.status(200).send("OUT|" + name + "|" + shortTime);
     }
 });
 
 // --- 5. BUTTON ROUTES (Download Summary & Clear) ---
 app.get('/download', (req, res) => {
-    // Generate the HR Summary CSV requested by the Professor
     let csv = "User ID,Full Name,First In,Last Out\n";
-    
-    // Loop through our summary object and write the rows
     for (const uid in dailySummary) {
         const data = dailySummary[uid];
         csv += `${uid},${data.user},${data.firstIn},${data.lastOut}\n`;
     }
     
-    // Add the current date to the file name so it's organized
     const dateOptions = { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' };
     const dateString = new Date().toLocaleDateString('en-GB', dateOptions).replace(/\//g, '-');
 
@@ -113,7 +106,7 @@ app.get('/download', (req, res) => {
 app.post('/clear', (req, res) => {
     rawLogs = [];
     activeSessions = {};
-    dailySummary = {}; // Clear the HR summary too!
+    dailySummary = {}; 
     clients.forEach(client => client.write(`data: {"action": "clear_ui"}\n\n`));
     res.status(200).send("Cleared");
 });
