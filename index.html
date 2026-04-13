@@ -1,89 +1,108 @@
-const express = require('express');
-const cors = require('cors');
-const path = require('path');
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #0f0c29; background: linear-gradient(to right, #24243e, #302b63, #0f0c29); color: white; font-family: 'Inter', sans-serif; min-height: 100vh; }
+        .glass { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 20px; padding: 30px; box-shadow: 0 8px 32px 0 rgba(0,0,0,0.37); }
+        .btn-primary { background: #00d2ff; border: none; font-weight: bold; border-radius: 10px; color: #000; }
+        .btn-danger-custom { background: transparent; border: 2px solid #ff4b4b; color: #ff4b4b; font-weight: bold; border-radius: 10px; transition: 0.3s; }
+        .btn-danger-custom:hover { background: #ff4b4b; color: white; }
+        .table { color: white; border-color: rgba(255,255,255,0.1); }
+        .status-badge { font-size: 0.8rem; padding: 5px 12px; border-radius: 20px; color: #000; }
+        .flash-update { animation: flash 1.5s ease-out; }
+        @keyframes flash { 0% { background-color: rgba(0, 210, 255, 0.4); } 100% { background-color: transparent; } }
+    </style>
+</head>
+<body class="py-5">
+    <div class="container">
+        <div class="row mb-4 align-items-center">
+            <div class="col">
+                <h1 class="fw-bold m-0 text-uppercase">Attendance Dashboard</h1>
+                <p class="text-white m-0 mt-1" style="opacity: 0.9;">Professional Cloud Terminal</p>
+            </div>
+            <div class="col-auto d-flex gap-3">
+                <button onclick="clearData()" class="btn btn-danger-custom px-4 py-2">Clear Data</button>
+                <a href="/download" class="btn btn-primary px-4 py-2">Download CSV</a>
+            </div>
+        </div>
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+        <div class="row g-4">
+            <div class="col-md-3">
+                <div class="glass text-center h-100 d-flex flex-column justify-content-center">
+                    <h6 class="text-uppercase text-muted small fw-bold">System Status</h6>
+                    <div class="d-flex justify-content-center align-items-center mt-2">
+                        <span class="status-badge bg-success me-2">ONLINE</span>
+                        <span id="clock" class="h4 m-0 fw-bold">--:--:--</span>
+                    </div>
+                </div>
+            </div>
 
-app.use(express.json());
-app.use(cors());
+            <div class="col-md-9">
+                <div class="glass">
+                    <h5 class="mb-4 fw-bold">Live Activity Stream</h5>
+                    <div class="table-responsive">
+                        <table class="table table-hover table-borderless align-middle">
+                            <thead class="border-bottom border-secondary">
+                                <tr>
+                                    <th>User ID</th>
+                                    <th>Full Name</th>
+                                    <th>Timestamp</th>
+                                    <th>Action</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="logTable"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-// --- 1. THE DATABASE & MEMORY ---
-let activeSessions = {};
-let attendanceLogs = []; // Stores data for the CSV download
+    <script>
+        // Start the clock safely
+        setInterval(() => {
+            document.getElementById('clock').innerText = new Date().toLocaleTimeString();
+        }, 1000);
 
-function lookupUser(uid) {
-    if (uid === "D3 5F 75 34") return "Vishnuprasad";
-    if (uid === "AE CB DE 89") return "Deepasree";
-    if (uid === "0E 0D CF 89") return "Seshan";
-    return "Unknown User";
-}
+        function clearData() {
+            if(confirm("⚠️ This will wipe the cloud logs. Continue?")) {
+                fetch('/clear', { method: 'POST' });
+            }
+        }
 
-// --- 2. SERVE THE HTML DASHBOARD ---
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
+        // Securely connect to the Render Node Server
+        const eventSource = new EventSource('/events');
+        
+        eventSource.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            const tableBody = document.getElementById('logTable');
+            
+            if (data.action === "clear_ui") {
+                tableBody.innerHTML = "";
+                return; 
+            }
+            
+            let statusBadge = data.user === "Unknown User" 
+                ? `<span class="badge bg-danger rounded-pill text-white">✖ Unverified</span>` 
+                : `<span class="badge bg-success rounded-pill text-black">● Verified</span>`;
 
-// --- 3. LIVE CONNECTION TO THE WEBSITE ---
-let clients = [];
-app.get('/events', (req, res) => {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    clients.push(res);
-    req.on('close', () => {
-        clients = clients.filter(client => client !== res);
-    });
-});
+            let actionColor = data.action === "Check-In" ? "text-success" : "text-warning";
 
-// --- 4. RECEIVE ESP32 SCANS ---
-app.post('/api/attendance', (req, res) => {
-    const uid = req.body.uid;
-    if (!uid) return res.status(400).send("No UID");
-
-    const name = lookupUser(uid);
-
-    // Calculate Indian Standard Time (IST)
-    const timeOptions = { timeZone: 'Asia/Kolkata', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' };
-    const timeString = new Date().toLocaleTimeString('en-US', timeOptions);
-
-    // Determine Check-in or Check-out
-    let action = "Check-In";
-    if (activeSessions[uid]) {
-        action = "Check-Out";
-        delete activeSessions[uid];
-    } else if (name !== "Unknown User") {
-        activeSessions[uid] = true;
-    }
-
-    // Save to the CSV array
-    attendanceLogs.push({id: uid, user: name, time: timeString, action: action});
-
-    // Create the data package
-    const payload = JSON.stringify({ id: uid, user: name, time: timeString, action: action });
-    console.log(`\n🔔 CLOUD PROCESSED: ${payload}`);
-
-    // Broadcast to the website instantly
-    clients.forEach(client => client.write(`data: ${payload}\n\n`));
-
-    res.status(200).send("Success");
-});
-
-// --- 5. BUTTON ROUTES (Download & Clear) ---
-app.get('/download', (req, res) => {
-    let csv = "User ID,Full Name,Timestamp,Action\n";
-    attendanceLogs.forEach(log => { csv += `${log.id},${log.user},${log.time},${log.action}\n`; });
-    res.setHeader('Content-disposition', 'attachment; filename=attendance.csv');
-    res.set('Content-Type', 'text/csv');
-    res.status(200).send(csv);
-});
-
-app.post('/clear', (req, res) => {
-    attendanceLogs = [];
-    activeSessions = {};
-    clients.forEach(client => client.write(`data: {"action": "clear_ui"}\n\n`));
-    res.status(200).send("Cleared");
-});
-
-// Start Server
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+            const row = `<tr class="flash-update">
+                <td class="fw-bold text-info">${data.id}</td>
+                <td>${data.user}</td>
+                <td class="fw-bold">${data.time}</td>
+                <td class="fw-bold ${actionColor}">${data.action}</td>
+                <td>${statusBadge}</td>
+            </tr>`;
+            
+            tableBody.insertAdjacentHTML('afterbegin', row);
+        };
+    </script>
+</body>
+</html>
