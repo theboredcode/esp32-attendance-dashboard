@@ -1,149 +1,89 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Attendance System</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body { 
-            background: #0f0c29; 
-            background: linear-gradient(to right, #24243e, #302b63, #0f0c29);
-            color: white; font-family: 'Inter', sans-serif; min-height: 100vh;
-        }
-        .glass {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 20px;
-            padding: 30px;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-        }
-        .btn-primary {
-            background: #00d2ff; border: none; font-weight: bold; border-radius: 10px; color: #000;
-        }
-        .btn-primary:hover {
-            background: #00b8e6; color: #000;
-        }
-        .table { color: white; border-color: rgba(255,255,255,0.1); }
-        .status-badge { font-size: 0.8rem; padding: 5px 12px; border-radius: 20px; background: #00ff88; color: #000; }
-        .white-subtitle { color: #ffffff !important; opacity: 0.9; }
-        
-        /* Highlight row temporarily when updated */
-        .flash-update { animation: flash 1.5s ease-out; }
-        @keyframes flash { 0% { background-color: rgba(0, 210, 255, 0.3); } 100% { background-color: transparent; } }
-    </style>
-</head>
-<body class="py-5">
-    <div class="container">
-        <div class="row mb-4 align-items-center">
-            <div class="col">
-                <h1 class="fw-bold m-0 text-uppercase">Attendance Dashboard</h1>
-                <p class="white-subtitle m-0 mt-1">Professional Attendance Terminal</p>
-            </div>
-            <div class="col-auto">
-                <a href="/download" class="btn btn-primary shadow-sm px-4 py-2">Download CSV Data</a>
-            </div>
-        </div>
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
 
-        <div class="row g-4">
-            <div class="col-md-3">
-                <div class="glass text-center h-100 d-flex flex-column justify-content-center">
-                    <h6 class="text-uppercase text-muted small fw-bold">System Status</h6>
-                    <div class="d-flex justify-content-center align-items-center mt-2">
-                        <span class="status-badge me-2">ONLINE</span>
-                        <span id="clock" class="h4 m-0 fw-bold">--:--:--</span>
-                    </div>
-                </div>
-            </div>
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-            <div class="col-md-9">
-                <div class="glass">
-                    <h5 class="mb-4 fw-bold">Live Activity Stream</h5>
-                    <div class="table-responsive">
-                        <table class="table table-hover table-borderless align-middle">
-                            <thead class="border-bottom border-secondary">
-                                <tr>
-                                    <th>User ID</th>
-                                    <th>Full Name</th>
-                                    <th>Check-in Time</th>
-                                    <th>Check-out Time</th> <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody id="logTable">
-                                </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+app.use(express.json());
+app.use(cors());
 
-    <script>
-        var gateway = `ws://${window.location.hostname}/ws`;
-        var websocket;
-        
-        // This object remembers who is currently checked in
-        let activeSessions = {}; 
+// --- 1. THE DATABASE & MEMORY ---
+let activeSessions = {};
+let attendanceLogs = []; // Stores data for the CSV download
 
-        window.onload = () => {
-            websocket = new WebSocket(gateway);
-            
-            websocket.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                const table = document.getElementById('logTable');
-                
-                // 1. Determine if Verified or Unverified
-                let statusBadge = "";
-                if (data.user === "Unknown User") {
-                    statusBadge = `<span class="badge bg-danger rounded-pill">✖ Unverified</span>`;
-                } else {
-                    statusBadge = `<span class="badge bg-success rounded-pill">● Verified</span>`;
-                }
+function lookupUser(uid) {
+    if (uid === "D3 5F 75 34") return "Vishnuprasad";
+    if (uid === "AE CB DE 89") return "Deepasree";
+    if (uid === "0E 0D CF 89") return "Seshan";
+    return "Unknown User";
+}
 
-                // 2. Check-In vs Check-Out Logic
-                // If the user is known AND they are already in the activeSessions list
-                if (data.user !== "Unknown User" && activeSessions[data.id]) {
-                    
-                    // IT IS A CHECK-OUT
-                    let rowId = activeSessions[data.id];
-                    let existingRow = document.getElementById(rowId);
-                    
-                    if (existingRow) {
-                        // Update the 4th column (Check-out time)
-                        existingRow.cells[3].innerHTML = `<span class="text-warning fw-bold">${data.time}</span>`;
-                        existingRow.classList.add("flash-update"); // Give it a cool flash effect
-                        
-                        // Remove them from active sessions so the next tap is a new Check-in
-                        delete activeSessions[data.id]; 
-                    }
-                    
-                } else {
-                    // IT IS A CHECK-IN (Or an Unknown User)
-                    let rowId = "row-" + Date.now(); // Give the row a unique ID
-                    
-                    // Only track sessions for known users
-                    if (data.user !== "Unknown User") {
-                        activeSessions[data.id] = rowId; 
-                    }
+// --- 2. SERVE THE HTML DASHBOARD ---
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
 
-                    // Create the new row
-                    const row = `<tr id="${rowId}">
-                        <td class="fw-bold text-info">${data.id}</td>
-                        <td>${data.user}</td>
-                        <td class="text-success fw-bold">${data.time}</td>
-                        <td class="text-muted">--:--:--</td> <td>${statusBadge}</td>
-                    </tr>`;
-                    
-                    table.insertAdjacentHTML('afterbegin', row);
-                }
-            };
-            
-            setInterval(() => {
-                const now = new Date();
-                document.getElementById('clock').innerText = now.toLocaleTimeString();
-            }, 1000);
-        };
-    </script>
-</body>
-</html>
+// --- 3. LIVE CONNECTION TO THE WEBSITE ---
+let clients = [];
+app.get('/events', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    clients.push(res);
+    req.on('close', () => {
+        clients = clients.filter(client => client !== res);
+    });
+});
+
+// --- 4. RECEIVE ESP32 SCANS ---
+app.post('/api/attendance', (req, res) => {
+    const uid = req.body.uid;
+    if (!uid) return res.status(400).send("No UID");
+
+    const name = lookupUser(uid);
+
+    // Calculate Indian Standard Time (IST)
+    const timeOptions = { timeZone: 'Asia/Kolkata', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' };
+    const timeString = new Date().toLocaleTimeString('en-US', timeOptions);
+
+    // Determine Check-in or Check-out
+    let action = "Check-In";
+    if (activeSessions[uid]) {
+        action = "Check-Out";
+        delete activeSessions[uid];
+    } else if (name !== "Unknown User") {
+        activeSessions[uid] = true;
+    }
+
+    // Save to the CSV array
+    attendanceLogs.push({id: uid, user: name, time: timeString, action: action});
+
+    // Create the data package
+    const payload = JSON.stringify({ id: uid, user: name, time: timeString, action: action });
+    console.log(`\n🔔 CLOUD PROCESSED: ${payload}`);
+
+    // Broadcast to the website instantly
+    clients.forEach(client => client.write(`data: ${payload}\n\n`));
+
+    res.status(200).send("Success");
+});
+
+// --- 5. BUTTON ROUTES (Download & Clear) ---
+app.get('/download', (req, res) => {
+    let csv = "User ID,Full Name,Timestamp,Action\n";
+    attendanceLogs.forEach(log => { csv += `${log.id},${log.user},${log.time},${log.action}\n`; });
+    res.setHeader('Content-disposition', 'attachment; filename=attendance.csv');
+    res.set('Content-Type', 'text/csv');
+    res.status(200).send(csv);
+});
+
+app.post('/clear', (req, res) => {
+    attendanceLogs = [];
+    activeSessions = {};
+    clients.forEach(client => client.write(`data: {"action": "clear_ui"}\n\n`));
+    res.status(200).send("Cleared");
+});
+
+// Start Server
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
