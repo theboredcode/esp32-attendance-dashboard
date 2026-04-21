@@ -14,9 +14,9 @@ let rawLogs = [];        // Keeps every scan for the live web stream
 let dailySummary = {};   // Keeps the HR First-In / Last-Out data
 
 function lookupUser(uid) {
-    if (uid === "D3 5F 75 34") return "Vishnuprasad";
-    if (uid === "AE CB DE 89") return "Deepasree";
-    if (uid === "0E 0D CF 89") return "Seshan";
+    if (uid === "8E A9 9B C4") return "Vishnuprasad";
+    if (uid === "32 38 98 EE") return "Deepasree";
+    if (uid === "7E 84 98 C4") return "Seshan";
     if (uid === "9E 8C DF 89") return "Guest"; // Your test card
     return "Unknown User";
 }
